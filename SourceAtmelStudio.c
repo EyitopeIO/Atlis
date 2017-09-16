@@ -25,48 +25,155 @@
 #define savedmin_off PORTB&=~(1<<PINB1)
 #define saving_on PORTB|=(1<<PINB7)
 #define saving_off PORTB&=~(1<<PINB7)
+
+/* Used to reference the elements in the array */
 #define MAX 2
 #define NOW 1
 #define MIN 0
 
-
 /************************************************/
 
-uint16_t begin_statistical_analysis(int number_of_iterations, int number_of_readings);
-void begin_saving_process(int no_of_iterations, int no_of_readings);
+void InitializeDataDirection( void );
+
+uint16_t begin_statistical_analysis(int number_of_iterations, int array_size);
+void begin_saving_process( int no_of_iterations, int array_size, uint16_t* pointer_to_array, unsigned int address);
 
 
-void InitializeADC(void);
-uint16_t ADCRead(uint8_t ch);
+void InitializeADC( void );
+uint16_t ADCRead( uint8_t ch );
 
 /**********************************************/
-
-//unsigned char EEMEM FIRST_RUN = 0x00; To know if it's the first time this program would ever run.
 
 const uint8_t ADC_channel = 0;
 
 volatile unsigned char max_button_value; //State of the buttons: high or low.
 volatile unsigned char min_button_value;
 
-volatile uint16_t FromADC0; //analog value read from LDR is a 16 bit quantity
 
-/* Here are arrays to keep values to save to EEPROM
- * I use 16-bit quantities because numbers could range from 0-1023
+/* Here are arrays to keep values to save to EEPROM except FromADC0
+ * I use 16-bit quantities because the analog values could range from 0-1023
 */ 
-uint16_t saved_max[2];  
-uint16_t saved_min[2];
+volatile uint16_t saved_max[2]; //I defined MAX, MIN, NOW, to make indexing easier.
+volatile uint16_t saved_min[2];
+volatile uint16_t FromADC0[2]; 
 
-int eeprom_max_address = 0;
-int eeprom_min_address = sizeof(saved_min);
+ /*Code banking under consideration*/
+unsigned int eeprom_max_address = 0;
+unsigned int eeprom_min_address = sizeof(saved_min);
 
 /*************************************************************************/
 
-int main(void)
-{	
+int main( void ) 
+{
+	
+	InitializeDataDirection();
+	InitializeADC();
+
+	/* Fetch the array I saved to the EEPROM. It contains values to run the algorithm*/
+	saved_max = eeprom_read_block( (void*)&saved_max, (const void*)eeprom_max_address, sizeof(saved_max) ); 
+	saved_min = eeprom_read_block( (void*)&saved_min, (const void*)eeprom_min_address, sizeof(saved_min) );
+	
+	uint16_t statical_results; //Results from statistical analysis
+	
+	/* These values below might change--most likely an increase--for better accuracy*/
+	uint8_t number_of_iterations = 10; 
+	uint8_t number_of_readings = 10; 
+
+	
+	while (1) 
+    {
+		
+		// To even out things, whatever number of iterations or readings must be applied to anything that would use it before it's changed.
+		
+		/*Read the values of the PINx register. It holds the current logic state of the device*/  
+		max_button_value = PIND;
+		min_button_value = PIND;  
+		
+		FromADC0[NOW] = begin_statistical_analysis(number_of_iterations, number_of_readings)
+
+		if ( FromADC0[NOW] <= saved_min[NOW] ) {
+
+			statical_results = begin_statistical_analysis(int number_of_iterations, int number_of_readings); //place switch_close in this function
+		}
+		else if (FromADC0[NOW] >= saved_max[NOW] ) {
+			statical_results = begin_statistical_analysis(int number_of_iterations, int number_of_readings) //Place switch_open in this
+		}
+	}		
+}
+
+void begin_saving_process (int no_of_iterations, int array_size, uint16_t* array, unsigned int address) {
+	
+	/*
+	* First parameter is a pointer to the structure. This would either be *p_saved_min or *p_saved_max.
+	* Second parameter is pointer to the address you'd like to write to in the EEPROM.
+	*/
+	
+	int start_max = 0;
+	int start_min = 1023;
+	int tracker = 0;
+	uint16_t temp;
+	
+	saving_on;
+	
+	do {
+		/* Let's say the device took readings when a light was shone on it,
+		 * and then the max value goes high. We know this highest isn't authentic.
+		 * To correct that, max reduces by 1, min increases by 1
+		 */   
+		*array[MAX] = *array[MAX] - 1;
+		*array[MIN] = *array[MIN] + 1;
+		
+		temp = ADCRead( ADC_channel ); //Read analog value from ADC.
+		if (temp > start_max) {
+			*array[MAX] = temp;
+		}
+		else if (temp < start_min) {
+			*array[MIN] = temp;
+		}
+		tracker++;
+		
+	} while (tracker < no_of_iterations);
+	
+	
+	/* No harm if the maximum and minimum values are the same */
+	*array[NOW] = ( *array[MAX] + *array[MIN] ) / 2;
+	 eeprom_write_block ( (const void*) array, (void*) address, sizeof(array) );
+	_delay_loop_1(1); //Just so that people can see what's happening. I don't yet know how fast the computation would happen.
+	saving_off;	
+}
+
+
+uint16_t begin_statistical_analysis(int number_of_iterations, int array_size) {
+	
+	/*What this does is get the average of readings for a number of trials*/
+	
+	int total, array_index, tracker;
+	uint16_t Readings[array_size];
+	uint16_t average;
+	
+	/* Initialize all elements to zero */
+	for(array_index=0; array_index <= array_size; array_index++) {
+		Readings[array_index] = 0;
+	}
+	
+	array_index = 0; //Reset to the first item in the array.
+	
+	for(tracker=0; tracker < number_of_iterations; tracker++) {
+		total = total - Readings[array_index];
+		Readings[array_index] = ADCRead(ADC_channel);
+		total = total + Readings[array_index];
+		if array_index >= array_size {
+			array_index = 0;
+		}
+	average = total / array_size;
+	return average;
+}
+
+void InitializeDataDirection( void ) {
 	
 	//configure port for input or output
 	//The bits are in this order: bit7-bit6-bit5-bit4-bit3-bit2-bit1-bit0
-	DDRB = 0b00100111; //0X27 
+	DDRB = 0b00100111; //0X27
 	DDRC = 0b11111110; //0X00
 	DDRD = 0b10011111; //0X9F
 
@@ -78,91 +185,9 @@ int main(void)
 	//portC0 = analog input from LDR, pin23
 	//portD5 = Switch to save min
 	//portD6 = Switch to save max
-	 
-   //Code banking under consideration
-	
-	InitializeADC();
-	saved_max = eeprom_read_block(); 
-	saved_min = eeprom_read_block();
-	
-	uint16_t statical_results; //Results from statistical analysis
-	
-	int number_of_iterations = 10; //This might increase or decrease (by pointers) based on whether readings are reliable or not.
-	int number_of_readings = 10; //This might also change as above.
-	
-	int *p_n_o_iter = &number_of_iterations;
-	int *p_n_o_read = &number_of_readings;
-
-	unsigned int mid_of_max_and_min = (max + min) / 2; 
-	unsigned char is_day = TRUE; //Works as a boolean to let me know if it's day. We should assume it's day
-	
-	while (1) 
-    {
-		
-		// To even out things, whatever number of iterations or readings must be applied to all cases before being changed.
-		
-		max_button_value = PORTD6;
-		min_button_value = PORTD5; 
-		/*Use an interrupt to deal with the button press.
-		*The interrupt should trigger a variable that would be used to save or not save.
-		*/
-		FromADC0.now = begin_statistical_analysis(number_of_iterations, number_of_readings)
-
-		if ( FromADC0 <= saved_min.now ) {
-			statical_results = begin_statistical_analysis(int number_of_iterations, int number_of_readings); //place switch_close in this function
-		}
-		else if (FromADC0 >= saved_max.now ) {
-			statical_results = begin_statistical_analysis(int number_of_iterations, int number_of_readings) //Place switch_open in this
-		}
-	}		
 }
 
-void begin_saving_process (int no_of_iterations, int array_size) {
-	
-	/*
-	* First parameter is a pointer to the structure. This would either be *p_saved_min or *p_saved_max.
-	* Second parameter is pointer to the address you'd like to write to in the EEPROM.
-	*/
-	
-	int start_max = 0;
-	int start_min = 1023;
-	char tracker;
-	uint16_t temp;
-	
-	saving_on;
-	
-	for (tracker=0; tracker <= no_of_iterations; tracker++ ) {
-		temp = begin_statistical_analysis(no_of_iterations, array_size);
-	}
-	
-	saving_off;	
-}
-
-
-uint16_t begin_statistical_analysis(int number_of_readings, int array_size) {
-	
-	/*What this does is get the average of readings for a number of trials*/
-	
-	int total, array_index, tracker;
-	uint16_t Readings[array_size];
-	uint16_t average;
-	
-	for(array_index=0; array_index <= array_size; array_index++) {
-		Readings[array_index] = 0;
-	}
-	array_index = 0;
-	for(tracker=0; tracker < number_of_readings; tracker++) {
-		total = total - Readings[array_index];
-		Readings[array_index] = ADCRead(ADC_channel);
-		total = total + Readings[array_index];
-		if array_index >= array_size {
-			array_index = 0;
-		}
-	average = total / array_size;
-	return average;
-}
-
-
+/* I copied the rest of the code below. */
 
 void InitializeADC()
 {
