@@ -1,8 +1,7 @@
 /*
  * Generic Atlis.c
  * Author : EyitopeIO_A
- * Started: 17/03/2017 1:33 pm
- * 
+
  * Chip: ATmega328P
  */ 
 
