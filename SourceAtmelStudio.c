@@ -1,7 +1,8 @@
 /*
  * Generic Atlis.c
  * Author : EyitopeIO_A
-
+ * Created: 17/03/2017 1:33 pm
+ * 
  * Chip: ATmega328P
  */ 
 
@@ -52,7 +53,7 @@ volatile unsigned char min_button_value;
  */ 
 uint16_t saved_max[MAX]; //I defined MAX, MIN, NOW, to make indexing easier.
 uint16_t saved_min[MAX];
-uint16_t FromADC0[MAX]; 
+uint16_t FromADC0; 
 
 int ADC_channel = 0x00; //Just felt like using a hex.
 
@@ -79,22 +80,34 @@ int main()
 	EEPROM_handler( 'r', eeprom_max_address, saved_max); //int EEPROM_handler( char mode, uint16_t address, uint16_t* array )
 	EEPROM_handler( 'r', eeprom_min_address, saved_min); 
 	
+	
 	while (1) 
     {
-		
 		// To even out things, whatever number of iterations or readings must be applied to anything that would use it before it's changed.
 		
-		/*Read the values of the PINx register. It holds the current logic state of the device*/  
-		max_button_value = PIND;
-		min_button_value = PIND;  
+		 
+		max_button_value = PIND; //PIND6
+		min_button_value = PIND; //PIND5
+		//Add code to check if which of the buttons go low here.   
 		
-		FromADC0[NOW] = begin_statistical_analysis(number_of_iterations, number_of_readings);
-
-		if ( FromADC0[NOW] <= saved_min[NOW] ) {
-			statistical_results = begin_statistical_analysis( number_of_iterations, number_of_readings); //place switch_close in this function
+		FromADC0 = ADCRead( ADC_channel );
+		
+		if (FromADC0 > saved_max[NOW]) {
+			//Add code to make the calibrating light blink very fast using timers. It shows device is busy.
+			statistical_results = begin_statistical_analysis( number_of_iterations, number_of_readings );
+			if (statistical_results > saved_max[NOW]) {
+				_delay_loop_1(1);
+				switch_open;
+			}
 		}
-		else if (FromADC0[NOW] >= saved_max[NOW] ) {
-			statistical_results = begin_statistical_analysis( number_of_iterations, number_of_readings); //Place switch_open in this
+		
+		if (FromADC0 < saved_min[NOW]) {
+			//Add code to make the calibrating light blink very fast using timers. It shows device is busy.
+			statistical_results = begin_statistical_analysis( number_of_iterations, number_of_readings );
+			if (statistical_results < saved_min[NOW]) {
+				_delay_loop_1(1);
+				switch_close;
+			}
 		}
 	}		
 	
