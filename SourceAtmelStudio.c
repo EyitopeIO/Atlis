@@ -1,8 +1,8 @@
 /*
  * Generic Atlis.c
  * Author : EyitopeIO_A
- * Created: 17/03/2017 1:33 pm
- * Completed: 21/05/2017 11:45 am
+ * Started: 17/03/2017 1:33 pm
+ * 
  * Chip: ATmega328P
  */ 
 
@@ -26,8 +26,6 @@
 #define saving_on PORTB|=(1<<PINB7)
 #define saving_off PORTB&=~(1<<PINB7)
 
-#define ADC_channel 0
-
 /* Used to reference the elements in the array */
 #define MAX 2
 #define NOW 1
@@ -50,13 +48,14 @@ int EEPROM_handler( char mode, uint16_t address, uint16_t* array);
 volatile unsigned char max_button_value; //State of the buttons: high or low.
 volatile unsigned char min_button_value;
 
-
 /* Here are arrays to keep values to save to EEPROM except FromADC0
  * I use 16-bit quantities because the analog values could range from 0-1023
  */ 
 uint16_t saved_max[MAX]; //I defined MAX, MIN, NOW, to make indexing easier.
 uint16_t saved_min[MAX];
 uint16_t FromADC0[MAX]; 
+
+int ADC_channel = 0x00; //Just felt like using a hex.
 
 
 /*************************************************************************/
@@ -68,7 +67,7 @@ int main()
 	InitializeADC();
 	
 	/*Code banking under consideration*/
-	uint16_t eeprom_max_address = 0;
+	uint16_t eeprom_max_address = 0; //it is 16 bit because of the function that would use it.
 	uint16_t eeprom_min_address = sizeof(saved_min);
 	
 	/* These values below might change--most likely an increase--for better accuracy*/
@@ -99,6 +98,8 @@ int main()
 			statistical_results = begin_statistical_analysis( number_of_iterations, number_of_readings); //Place switch_open in this
 		}
 	}		
+	
+	return 0;
 }
 
 
@@ -214,7 +215,7 @@ void InitializeDataDirection( void ) {
 	//portD6 = Switch to save max
 }
 
-/* I copied the rest of the code below. */
+/* I copied everything below. */
 
 void InitializeADC()
 {
@@ -222,25 +223,24 @@ void InitializeADC()
 	ADCSRA=(1<<ADEN)|(1<<ADPS2)|(1<<ADPS1)|(1<<ADPS0); //Prescalar div factor =128
 }
 
-uint16_t ADCRead (uint8_t ch) //Reading from Channel zero
+uint16_t ADCRead (ADC_channel) //Reading from Channel zero
 {
 	//Select ADC Channel ch must be 0-7
-	ch = ch & 0b00000111;
-	ADMUX |= ch;
+	ADC_channel = ADC_channel & 0b00000111;
+	ADMUX |= ADC_channel;
 
 	//Start Single conversion
 	ADCSRA |= (1<<ADSC);
 
 	//Wait for conversion to complete
 	while(!(ADCSRA & (1<<ADIF)));
-
+	
 	//Clear ADIF by writing one to it
 	//Note you may be wondering why we have write one to clear it
 	//This is standard way of clearing bits in io as said in datasheets.
 	//The code writes '1' but it result in setting bit to '0' !!!
-
 	ADCSRA|=(1<<ADIF);
-
+	
 	return(ADC);
-} 
+}
 
