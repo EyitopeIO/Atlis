@@ -43,7 +43,7 @@ void begin_saving_process( int no_of_iterations, int array_size, uint16_t* point
 void InitializeADC( void );
 uint16_t ADCRead( uint8_t ch );
 
-int EEPROM_handler( char mode, uint16_t address, uint16_t* array, uint16_t data ); //set data to zero if you're reading.
+int EEPROM_handler( char mode, uint16_t address, uint16_t* array); 
 
 /**********************************************/
 
@@ -78,8 +78,8 @@ int main()
 	uint16_t statistical_results;
 
 	/* Fetch the array I saved to the EEPROM. It contains values to run the algorithm*/
-	EEPROM_handler( 'r', eeprom_max_address, saved_max, 0 ); //int EEPROM_handler( char mode, uint16_t address, uint16_t* array, uint16_t data )
-	EEPROM_handler( 'r', eeprom_min_address, saved_min, 0 ); //Set data to zero if you're reading.
+	EEPROM_handler( 'r', eeprom_max_address, saved_max); //int EEPROM_handler( char mode, uint16_t address, uint16_t* array )
+	EEPROM_handler( 'r', eeprom_min_address, saved_min); 
 	
 	while (1) 
     {
@@ -102,18 +102,18 @@ int main()
 }
 
 
-int EEPROM_handler( char mode, uint16_t address, uint16_t array) {
+int EEPROM_handler( char mode, uint16_t address, uint16_t* array ) {
 	
 	int tracker;
 	switch(mode) {
 		
-		case 'r':
+		case 'r': //read
 		for (tracker=0; tracker != MAX; tracker++) {
 			*(array+tracker) = eeprom_read_word ( (const uint16_t*) address );
 			address = address + sizeof( *(array+tracker) );
 		}
 		
-		case 'w':
+		case 'w': //write
 		for (tracker=0; tracker != MAX; tracker++) {
 			eeprom_write_word ( (uint16_t*)address, *(array+tracker) );
 			address = address + sizeof( (*array+tracker) );
@@ -126,7 +126,7 @@ int EEPROM_handler( char mode, uint16_t address, uint16_t array) {
 	}
 }
 	
-void begin_saving_process (int no_of_iterations, int array_size, uint16_t* array, unsigned int address) {
+void begin_saving_process (int no_of_iterations, int array_size, uint16_t* array, uint16_t address) {
 	
 	saving_on;
 	
@@ -161,7 +161,7 @@ void begin_saving_process (int no_of_iterations, int array_size, uint16_t* array
 	/* No harm if the maximum and minimum values are the same */
 	*(array+NOW) = ( *(array+MAX) + *(array+MIN) ) / 2;
 	
-	 EEPROM_handler('s', (uint16_t)address, array); //int EEPROM_handler( char mode, uint16_t address, uint16_t array, ) 
+	 EEPROM_handler('w', address, array); //int EEPROM_handler( char mode, uint16_t address, uint16_t array ) 
 	 
 	_delay_loop_1(1); //Just so that people can see what's happening. I don't yet know how fast the computation would happen.
 	
