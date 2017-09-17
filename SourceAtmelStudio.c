@@ -85,34 +85,56 @@ int main()
     {
 		// To even out things, whatever number of iterations or readings must be applied to anything that would use it before it's changed.
 		
-		 
+		 /* This is the logic: 
+		  * 1) Read from ADC.
+		  * 2) Compare read value with saved maximum. If it's greater, do a more accurate reading.
+		  *    For saved minimum, do a more accurate reading if it's lower.
+		  * 3) If it's neither greater than max or less than min, number_of_iterations and number_of_readings.
+		  *
+		  */
 		max_button_value = PIND; //PIND6
 		min_button_value = PIND; //PIND5
-		//Add code to check if which of the buttons go low here.   
+		//TODO: Add code to check which of the buttons are low here. If low, begin the saving process.   
 		
 		FromADC0 = ADCRead( ADC_channel );
 		
 		if (FromADC0 > saved_max[NOW]) {
-			//Add code to make the calibrating light blink very fast using timers. It shows device is busy.
+			// TODO: Add code to make the calibrating light blink very fast using timers to show that the device is busy.
 			statistical_results = begin_statistical_analysis( number_of_iterations, number_of_readings );
-			if (statistical_results > saved_max[NOW]) {
-				_delay_loop_1(1);
-				switch_open;
+			if (statistical_results >= saved_max[NOW]) {
+				while( !(FromADC0 <= saved_min[NOW]) ) { //Don't exit for as long as its bright
+					FromADC0 = ADCRead( ADC_channel );
+					switch_open;
+				}
+			}
+			else {
+				number_of_iterations++; //Increase so that you'd be more precise next time because you were deceived.
+				number_of_readings++;
 			}
 		}
 		
-		if (FromADC0 < saved_min[NOW]) {
-			//Add code to make the calibrating light blink very fast using timers. It shows device is busy.
+		else if (FromADC0 < saved_min[NOW]) {
+			//TODO: Add code to make the calibrating light blink very fast using timers. It shows device is busy.
 			statistical_results = begin_statistical_analysis( number_of_iterations, number_of_readings );
-			if (statistical_results < saved_min[NOW]) {
-				_delay_loop_1(1);
-				switch_close;
+			if (statistical_results <= saved_min[NOW]) {
+				while( !(FromADC0 >= saved_max[NOW]) ) {
+					FromADC0 = ADCRead ( ADC_channel );
+					switch_close;
+				}
+			}
+			else {
+				number_of_iterations++;
+				number_of_readings++;
 			}
 		}
-	}		
-	
-	return 0;
+		
+		else {
+			number_of_iterations = 10;
+			number_of_readings = 10;
+		}
+	}
 }
+					
 
 
 int EEPROM_handler( char mode, uint16_t address, uint16_t* array ) {
