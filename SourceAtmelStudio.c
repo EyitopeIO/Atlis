@@ -38,8 +38,8 @@ void InitializeDataDirection( void );
 uint16_t begin_statistical_analysis( int number_of_iterations, int array_size );
 void begin_saving_process( int no_of_iterations, int array_size, uint16_t* pointer_to_array, unsigned int address );
 
-void InitializeADC( void );
-uint16_t ADCRead( uint8_t ch );
+void Initialize_ADC( void );
+uint16_t Read_from_ADC( uint8_t channel );
 
 int EEPROM_handler( char mode, uint16_t address, uint16_t* array); 
 
@@ -51,24 +51,24 @@ volatile unsigned char min_button_value;
 /* Here are arrays to keep values to save to EEPROM except FromADC0
  * I use 16-bit quantities because the analog values could range from 0-1023
  */ 
-uint16_t saved_max[MAX]; //I defined MAX, MIN, NOW, to make indexing easier.
+uint16_t saved_max[MAX]; //I defined MAX, MIN, NOW, to make indexing obvious.
 uint16_t saved_min[MAX];
 uint16_t FromADC0; 
 
-int ADC_channel = 0x00; //Just felt like using a hex.
+uint8_t ch = 0x00; //Just felt like using a hex.
 
 
 /*************************************************************************/
 
-int main() 
+int main( void ) 
 {
 	
 	InitializeDataDirection();
-	InitializeADC();
+	Initialize_ADC();
 	
 	/*Code banking under consideration*/
 	uint16_t eeprom_max_address = 0; //it is 16 bit because of the function that would use it.
-	uint16_t eeprom_min_address = sizeof(saved_min);
+	uint16_t eeprom_min_address = sizeof(saved_max);
 	
 	/* These values below might change--most likely an increase--for better accuracy*/
 	uint8_t number_of_iterations = 10;
@@ -94,16 +94,16 @@ int main()
 		  */
 		max_button_value = PIND; //PIND6
 		min_button_value = PIND; //PIND5
-		//TODO: Add code to check which of the buttons are low here. If low, begin the saving process.   
+		//Add code to check which of the buttons go low here.   
 		
-		FromADC0 = ADCRead( ADC_channel );
+		FromADC0 = Read_from_ADC( ch );
 		
 		if (FromADC0 > saved_max[NOW]) {
-			// TODO: Add code to make the calibrating light blink very fast using timers to show that the device is busy.
+			//Add code to make the calibrating light blink very fast using timers to show that the device is busy.
 			statistical_results = begin_statistical_analysis( number_of_iterations, number_of_readings );
 			if (statistical_results >= saved_max[NOW]) {
 				while( !(FromADC0 <= saved_min[NOW]) ) { //Don't exit for as long as its bright
-					FromADC0 = ADCRead( ADC_channel );
+					FromADC0 = Read_from_ADC( ch );
 					switch_open;
 				}
 			}
@@ -114,11 +114,11 @@ int main()
 		}
 		
 		else if (FromADC0 < saved_min[NOW]) {
-			//TODO: Add code to make the calibrating light blink very fast using timers. It shows device is busy.
+			//Add code to make the calibrating light blink very fast using timers. It shows device is busy.
 			statistical_results = begin_statistical_analysis( number_of_iterations, number_of_readings );
 			if (statistical_results <= saved_min[NOW]) {
 				while( !(FromADC0 >= saved_max[NOW]) ) {
-					FromADC0 = ADCRead ( ADC_channel );
+					FromADC0 = Read_from_ADC ( ch );
 					switch_close;
 				}
 			}
@@ -154,10 +154,8 @@ int EEPROM_handler( char mode, uint16_t address, uint16_t* array ) {
 			address = address + sizeof( (*array+tracker) );
 		}
 		
-		
 		default:
 		return 0;
-		
 	}
 }
 	
@@ -168,7 +166,7 @@ void begin_saving_process (int no_of_iterations, int array_size, uint16_t* array
 	int start_max = 0;
 	int start_min = 1023;
 	int tracker = 0;
-	uint16_t temp;
+	volatile uint16_t temp;
 	
 	*(array+MAX) = 1; //We don't want to have a negative number when subtraction happens the first time, do we?
 	*(array+MIN) = 1;
@@ -181,7 +179,7 @@ void begin_saving_process (int no_of_iterations, int array_size, uint16_t* array
 		*(array+MAX) = *(array+MAX) - 1;
 		*(array+MIN) = *(array+MIN) + 1;
 		
-		temp = ADCRead( ADC_channel ); //Read analog value from ADC.
+		temp = Read_from_ADC( ch ); //Read analog value from ADC.
 		if (temp > start_max) {
 			*(array+MAX) = temp;
 		}
@@ -219,9 +217,9 @@ uint16_t begin_statistical_analysis(int number_of_iterations, int array_size) {
 	
 	array_index = 0; //Reset to the first item in the array.
 	
-	for(tracker=0; tracker < number_of_iterations; tracker++) {
+	for(tracker=0, total=0; tracker < number_of_iterations; tracker++) {
 		total = total - Readings[array_index];
-		Readings[array_index] = ADCRead(ADC_channel);
+		Readings[array_index] = Read_from_ADC(ch);
 		total = total + Readings[array_index];
 		array_index++;
 		if (array_index >= array_size) {
@@ -229,6 +227,7 @@ uint16_t begin_statistical_analysis(int number_of_iterations, int array_size) {
 		}
 	average = total / array_size;
 	return average;
+	}
 }
 
 void InitializeDataDirection( void ) {
@@ -251,23 +250,23 @@ void InitializeDataDirection( void ) {
 
 /* I copied everything below. */
 
-void InitializeADC()
+void Initialize_ADC( void )
 {
-	ADMUX=(1<<REFS0);                         // For Aref=AVcc;
+	ADMUX=(1<<REFS0); // For Aref=AVcc;
 	ADCSRA=(1<<ADEN)|(1<<ADPS2)|(1<<ADPS1)|(1<<ADPS0); //Prescalar div factor =128
 }
 
-uint16_t ADCRead (ADC_channel) //Reading from Channel zero
+uint16_t Read_from_ADC (uint8_t channel) //Reading from Channel zero
 {
 	//Select ADC Channel ch must be 0-7
-	ADC_channel = ADC_channel & 0b00000111;
-	ADMUX |= ADC_channel;
+	channel = channel & 0b00000111;
+	ADMUX |= channel;
 
 	//Start Single conversion
 	ADCSRA |= (1<<ADSC);
 
 	//Wait for conversion to complete
-	while(!(ADCSRA & (1<<ADIF)));
+	while( !(ADCSRA & (1<<ADIF) ) );
 	
 	//Clear ADIF by writing one to it
 	//Note you may be wondering why we have write one to clear it
