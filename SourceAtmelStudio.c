@@ -92,10 +92,17 @@ int main( void )
 		  * 3) If it's neither greater than max or less than min, number_of_iterations and number_of_readings.
 		  *
 		  */
-		max_button_value = PIND; //PIND6
-		min_button_value = PIND; //PIND5
-		//Add code to check which of the buttons go low here.   
+		max_button_value = PIND6; //PIND6
+		min_button_value = PIND5; //PIND5
 		
+		/*Code to check state of buttons here*/
+		if (PIND5 == 0) {
+			begin_saving_process(number_of_iterations number_of_readings,saved_min, eeprom_min_address);
+		}
+		else if (PIND6 == 0) {
+			begin_saving_process(number_of_iterations, number_of_readings, saved_max, eeprom_max_address);
+		}
+		.   
 		FromADC0 = Read_from_ADC( ch );
 		
 		if (FromADC0 > saved_max[NOW]) {
@@ -240,7 +247,7 @@ void InitializeDataDirection( void ) {
 
 	//portB0 = status of switch, pin14
 	//portB1 = min_is_saved indicator, pin15
-	//portB2 = max_is_saved indicator, pin16
+	//portB2 = max_is_saved indicator, pin16 
 	//portB5 = calibrating indicator, pin19
 	//portB7 = saving indicator pin13
 	//portC0 = analog input from LDR, pin23
