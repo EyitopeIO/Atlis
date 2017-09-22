@@ -10,6 +10,9 @@
 
 //Consider adding code to set the fuse bits to use an external clock signal
 
+
+/*I haven't added code to properly use all the indicator lights*/
+
 #include <avr/io.h>
 #include <util/delay_basic.h>
 #include <avr/eeprom.h>
