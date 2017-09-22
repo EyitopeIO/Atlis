@@ -100,12 +100,12 @@ int main( void )
 		
 		/*Code to check state of buttons here*/
 		if (PIND5 == 0) {
-			begin_saving_process(number_of_iterations number_of_readings,saved_min, eeprom_min_address);
+			begin_saving_process(number_of_iterations, number_of_readings,saved_min, eeprom_min_address);
 		}
 		else if (PIND6 == 0) {
 			begin_saving_process(number_of_iterations, number_of_readings, saved_max, eeprom_max_address);
 		}
-		.   
+		 
 		FromADC0 = Read_from_ADC( ch );
 		
 		if (FromADC0 > saved_max[NOW]) {
