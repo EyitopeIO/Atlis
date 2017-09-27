@@ -29,6 +29,11 @@
 #define saving_on PORTB|=(1<<PINB7)
 #define saving_off PORTB&=~(1<<PINB7)
 
+// bits = bits | (1 << x); set bit x
+// bits = bits ^ (1 << x); toggle bit x
+// bits = bits & ~(1 << x); clears bit x
+
+
 /* Used to reference the elements in the array */
 #define MAX 2
 #define NOW 1
@@ -37,19 +42,21 @@
 /************************************************/
 
 void InitializeDataDirection( void );
+void Initialize_ADC( void );
+uint16_t Read_from_ADC( uint8_t channel );
+void Timer_Config( char mode );
 
 uint16_t begin_statistical_analysis( int number_of_iterations, int array_size );
 void begin_saving_process( int no_of_iterations, int array_size, uint16_t* pointer_to_array, unsigned int address );
 
-void Initialize_ADC( void );
-uint16_t Read_from_ADC( uint8_t channel );
+
 
 int EEPROM_handler( char mode, uint16_t address, uint16_t* array); 
 
 /**********************************************/
 
-volatile unsigned char max_button_value; //State of the buttons: high or low.
-volatile unsigned char min_button_value;
+unsigned int max_button_value; //State of the buttons: high or low.
+unsigned int min_button_value;
 
 /* Here are arrays to keep values to save to EEPROM except FromADC0
  * I use 16-bit quantities because the analog values could range from 0-1023
@@ -69,7 +76,7 @@ int main( void )
 	InitializeDataDirection();
 	Initialize_ADC();
 	
-	/*Code banking under consideration*/
+	/*EEPROM banking under consideration*/
 	uint16_t eeprom_max_address = 0; //it is 16 bit because of the function that would use it.
 	uint16_t eeprom_min_address = sizeof(saved_max);
 	
@@ -105,16 +112,16 @@ int main( void )
 		else if (PIND6 == 0) {
 			begin_saving_process(number_of_iterations, number_of_readings, saved_max, eeprom_max_address);
 		}
-		 
+	   
 		FromADC0 = Read_from_ADC( ch );
 		
 		if (FromADC0 > saved_max[NOW]) {
 			//Add code to make the calibrating light blink very fast using timers to show that the device is busy.
 			statistical_results = begin_statistical_analysis( number_of_iterations, number_of_readings );
 			if (statistical_results >= saved_max[NOW]) {
+				switch_open;
 				while( !(FromADC0 <= saved_min[NOW]) ) { //Don't exit for as long as its bright
 					FromADC0 = Read_from_ADC( ch );
-					switch_open;
 				}
 			}
 			else {
@@ -127,9 +134,9 @@ int main( void )
 			//Add code to make the calibrating light blink very fast using timers. It shows device is busy.
 			statistical_results = begin_statistical_analysis( number_of_iterations, number_of_readings );
 			if (statistical_results <= saved_min[NOW]) {
+				switch_close;
 				while( !(FromADC0 >= saved_max[NOW]) ) {
 					FromADC0 = Read_from_ADC ( ch );
-					switch_close;
 				}
 			}
 			else {
@@ -211,7 +218,6 @@ void begin_saving_process (int no_of_iterations, int array_size, uint16_t* array
 	saving_off;	
 }
 
-
 uint16_t begin_statistical_analysis(int number_of_iterations, int array_size) {
 	
 	/*What this does is get the average of readings for a number of trials*/
@@ -287,3 +293,18 @@ uint16_t Read_from_ADC (uint8_t channel) //Reading from Channel zero
 	return(ADC);
 }
 
+void Timer_Config( char mode ) {
+	/*This function configures the timer to generate interrupt so
+	* that the calibrating indicator can blink quickly when device is busy.
+	* It sets TCCR0, Timer Control Register
+	*/
+	
+	/* First set timer to normal mode D6 D3 = 0 0.
+	*  Select clock source to external (clock on rising edge) by setting D2 D1 D0 = 1 1 1.
+	* Stop timer by setting D2 D1 D0 to 0 0 0.
+	* Monitor TIFR, Timer Interrupt Flag Register.
+	* Bit 0 is TOV0, 1 if overflow. Generate interrupt with this.
+	* Bit 1 is OCF0, 1 IF output compare is true.
+	* So load TCNT0 with initial value.
+	
+}
