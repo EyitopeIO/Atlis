@@ -123,11 +123,11 @@ int main( void )
 		FromADC0 = Read_from_ADC( ch );
 		
 		if (FromADC0 > saved_max[NOW]) {
-			Timer_Config('1'); //start
+			timer_config('1'); //start
 			//Add code to make the calibrating light blink very fast using timers to show that the device is busy.
 			statistical_results = begin_statistical_analysis( number_of_iterations, number_of_readings );
 			if (statistical_results >= saved_max[NOW]) {
-				Timer_Config('0'); //stop
+				timer_config('0'); //stop
 				switch_open;
 				while( !(FromADC0 <= saved_min[NOW]) ) { //Don't exit for as long as its bright
 					FromADC0 = Read_from_ADC( ch );
@@ -140,11 +140,11 @@ int main( void )
 		}
 		
 		else if (FromADC0 < saved_min[NOW]) {
-			Timer_Config('1'); 
+			timer_config('1'); 
 			//Add code to make the calibrating light blink very fast using timers. It shows device is busy.
 			statistical_results = begin_statistical_analysis( number_of_iterations, number_of_readings );
 			if (statistical_results <= saved_min[NOW]) {
-				Timer_Config('0');
+				timer_config('0');
 				switch_close;
 				while( !(FromADC0 >= saved_max[NOW]) ) {
 					FromADC0 = Read_from_ADC ( ch );
@@ -237,7 +237,7 @@ uint16_t begin_statistical_analysis(int number_of_iterations, int array_size) {
 	
 	int total, array_index, tracker;
 	uint16_t Readings[array_size];
-	uint16_t average;
+	uint16_t average = 0;
 	
 	/* Initialize all elements to zero */
 	for(array_index=0; array_index <= array_size; array_index++) {
@@ -254,9 +254,9 @@ uint16_t begin_statistical_analysis(int number_of_iterations, int array_size) {
 		if (array_index >= array_size) {
 			array_index = 0;
 		}
-	average = total / array_size;
-	return average;
+	average = total / array_size;	
 	}
+	return average;
 }
 
 void InitializeDataDirection( void ) {
@@ -342,13 +342,13 @@ void timer_config( char button ) {
 		
 		case('0'): //stop
 		cli(); //disable global interrupt.
-		TCCR0B = TCCR0B & ~(1 << CS00);
+		TCCR0B = TCCR0B & ~(1 << CS00); //clear bit
 		TCCR0B = TCCR0B & ~(1 << CS01);
 		TCCR0B = TCCR0B & ~(1 << CS02);
 	}
 }
 
-void ISR ( TIMER0_OVF_vect ) { //This would be the interrupt function.
+ISR ( TIMER0_OVF_vect ) { //This would be the interrupt function.
 	if (counter == 49) {
 		PORTB = PORTB ^ (1 << 5); //Toggle calibrating indicator on PORTB5
 		counter = 0;
