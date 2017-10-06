@@ -16,6 +16,7 @@
 #include <avr/io.h>
 #include <util/delay_basic.h>
 #include <avr/eeprom.h>
+#include <avr/interrupt.h>
 
 #define F_CPU 16000000// 8MHz for testing, 16Mhz actual 
 #define calibrating_off PORTB&=~(1<<PINB5) 
@@ -29,9 +30,7 @@
 #define saving_on PORTB|=(1<<PINB7)
 #define saving_off PORTB&=~(1<<PINB7)
 
-// bits = bits | (1 << x); set bit x
-// bits = bits ^ (1 << x); toggle bit x
-// bits = bits & ~(1 << x); clears bit x
+
 
 
 /* Used to reference the elements in the array */
@@ -44,7 +43,7 @@
 void InitializeDataDirection( void );
 void Initialize_ADC( void );
 uint16_t Read_from_ADC( uint8_t channel );
-void Timer_Config( char mode );
+void timer_config( char mode ); //1 for on, 0 for off.
 
 uint16_t begin_statistical_analysis( int number_of_iterations, int array_size );
 void begin_saving_process( int no_of_iterations, int array_size, uint16_t* pointer_to_array, unsigned int address );
@@ -66,6 +65,7 @@ uint16_t saved_min[MAX];
 uint16_t FromADC0; 
 
 uint8_t ch = 0x00; //Just felt like using a hex.
+volatile uint8_t counter = 0; //used by interrupt. Counts up to 49
 
 
 /*************************************************************************/
@@ -84,12 +84,15 @@ int main( void )
 	uint8_t number_of_iterations = 10;
 	uint8_t number_of_readings = 10;
 	
-	uint16_t statistical_results;
+	uint16_t statistical_results; 
 
 	/* Fetch the array I saved to the EEPROM. It contains values to run the algorithm*/
 	EEPROM_handler( 'r', eeprom_max_address, saved_max); //int EEPROM_handler( char mode, uint16_t address, uint16_t* array )
 	EEPROM_handler( 'r', eeprom_min_address, saved_min); 
 	
+	/*asm("LDI R16, 1<<TOV0");
+	asm("OUT TIMSK R16");
+	asm("SEI");*/
 	
 	while (1) 
     {
@@ -102,23 +105,29 @@ int main( void )
 		  * 3) If it's neither greater than max or less than min, number_of_iterations and number_of_readings.
 		  *
 		  */
-		max_button_value = PIND6; //PIND6
-		min_button_value = PIND5; //PIND5
+		 
+		 _delay_loop_2(1000);
+		 calibrating_on;
+		 _delay_loop_2(1000);
+		 calibrating_off;
+		 
 		
 		/*Code to check state of buttons here*/
-		if (PIND5 == 0) {
+		if ( !(PORTD = PORTD | (1 << PORTD5)) ) {
 			begin_saving_process(number_of_iterations, number_of_readings,saved_min, eeprom_min_address);
 		}
-		else if (PIND6 == 0) {
+		else if ( !(PORTD = PORTD | (1 << PORTD6)) ) {
 			begin_saving_process(number_of_iterations, number_of_readings, saved_max, eeprom_max_address);
 		}
 	   
 		FromADC0 = Read_from_ADC( ch );
 		
 		if (FromADC0 > saved_max[NOW]) {
+			Timer_Config('1'); //start
 			//Add code to make the calibrating light blink very fast using timers to show that the device is busy.
 			statistical_results = begin_statistical_analysis( number_of_iterations, number_of_readings );
 			if (statistical_results >= saved_max[NOW]) {
+				Timer_Config('0'); //stop
 				switch_open;
 				while( !(FromADC0 <= saved_min[NOW]) ) { //Don't exit for as long as its bright
 					FromADC0 = Read_from_ADC( ch );
@@ -131,9 +140,11 @@ int main( void )
 		}
 		
 		else if (FromADC0 < saved_min[NOW]) {
+			Timer_Config('1'); 
 			//Add code to make the calibrating light blink very fast using timers. It shows device is busy.
 			statistical_results = begin_statistical_analysis( number_of_iterations, number_of_readings );
 			if (statistical_results <= saved_min[NOW]) {
+				Timer_Config('0');
 				switch_close;
 				while( !(FromADC0 >= saved_max[NOW]) ) {
 					FromADC0 = Read_from_ADC ( ch );
@@ -178,6 +189,7 @@ int EEPROM_handler( char mode, uint16_t address, uint16_t* array ) {
 	
 void begin_saving_process (int no_of_iterations, int array_size, uint16_t* array, uint16_t address) {
 	
+	asm("CLI"); 
 	saving_on;
 	
 	int start_max = 0;
@@ -193,6 +205,7 @@ void begin_saving_process (int no_of_iterations, int array_size, uint16_t* array
 		 * and then the max value goes high. We know this highest isn't authentic.
 		 * To correct that, max reduces by 1, min increases by 1
 		 */   
+		
 		*(array+MAX) = *(array+MAX) - 1;
 		*(array+MIN) = *(array+MIN) + 1;
 		
@@ -293,7 +306,12 @@ uint16_t Read_from_ADC (uint8_t channel) //Reading from Channel zero
 	return(ADC);
 }
 
-void Timer_Config( char mode ) {
+void timer_config( char button ) {
+		
+	// bits = bits | (1 << x); set bit x
+	// bits = bits ^ (1 << x); toggle bit x
+	// bits = bits & ~(1 << x); clears bit x
+	
 	/*This function configures the timer to generate interrupt so
 	* that the calibrating indicator can blink quickly when device is busy.
 	* It sets TCCR0, Timer Control Register
@@ -305,6 +323,35 @@ void Timer_Config( char mode ) {
 	* Monitor TIFR, Timer Interrupt Flag Register.
 	* Bit 0 is TOV0, 1 if overflow. Generate interrupt with this.
 	* Bit 1 is OCF0, 1 IF output compare is true.
-	* So load TCNT0 with initial value.
+	* So load TCNT0 with initial value.*/
 	
+	switch(button) {
+		case('1'): //start
+		sei(); //Enable global interrupts.
+		TCNT0 = 0X00; //initial value for Timer Control Register 0
+		
+		//Set timer to normal mode
+		TCCR0A = TCCR0A & ~(1 <<WGM00); //clear the bits.
+		TCCR0A = TCCR0A & ~(1 <<WGM01);
+		TCCR0B = TCCR0B & ~(1 <<WGM02);
+		
+		//No prescaler mode. Timer starts now.
+		TCCR0B = TCCR0B | (1 << CS00); //set bit
+		TCCR0B = TCCR0B & ~(1<<CS01);  //clear bit
+		TCCR0B = TCCR0B & ~(1 << CS02);
+		
+		case('0'): //stop
+		cli(); //disable global interrupt.
+		TCCR0B = TCCR0B & ~(1 << CS00);
+		TCCR0B = TCCR0B & ~(1 << CS01);
+		TCCR0B = TCCR0B & ~(1 << CS02);
+	}
+}
+
+void ISR ( TIMER0_OVF_vect ) { //This would be the interrupt function.
+	if (counter == 49) {
+		PORTB = PORTB ^ (1 << 5); //Toggle calibrating indicator on PORTB5
+		counter = 0;
+	}
+	counter++;
 }
